@@ -335,7 +335,7 @@ class A2CAgent(object):
             best_rewards_list.append(best_cost)
 
             # visualize best route for graph with idx
-            if graph_idx == 1:
+            if graph_idx == 0:
                 best_sol = sols[best_i]
                 route_truck = [env.n_nodes - 1] + [step[0].item() for step in best_sol]
                 route_drone = [env.n_nodes - 1] + [step[1].item() for step in best_sol]
@@ -380,16 +380,29 @@ def plot_route(coords, route_truck, route_drone, depot_idx=None, title="Optimal 
     plt.plot(drone_path[:, 0], drone_path[:, 1], '--x', label='Drone')
 
     for i, (xi, yi) in enumerate(coords):
-        plt.text(xi + 0.01, yi + 0.01, str(i), fontsize=8)
+        label = "0" if i == depot_idx else str(i + 1 if i < depot_idx else i)
+        plt.text(
+            xi + 1, yi + 1,  # небольшое смещение
+            label,
+            fontsize=10,  # увеличить шрифт
+            fontweight='bold',  # жирный
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, boxstyle='round,pad=0.2')  # фон
+        )
+        # plt.text(xi + 0.01, yi + 0.01, str(i), fontsize=8)
 
     plt.legend()
     plt.title(title)
     plt.grid(True)
 
+    max_range = max(coords[:, 0].max(), coords[:, 1].max())
+    padding = max_range * 0.05
+    plt.xlim(0, max_range + padding)
+    plt.ylim(0, max_range + padding)
+
     if save_path:
         plt.savefig(save_path)
     else:
         plt.show()
-
     plt.close()
-    
+
+
