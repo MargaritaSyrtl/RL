@@ -47,6 +47,7 @@ def latlon_to_xy(lat, lon):
     return np.array([x, y])
 
 
+# 1. lat, lon to UTM
 coords_xy = np.vstack([latlon_to_xy(lat, lon) for lat, lon in coords])
 
 # calculate global boundaries (in meters at the corners of the rectangle lat/lon)
@@ -75,6 +76,7 @@ with open(f"data/DroneTruck-size-100-len-{num_points}.txt", "w") as f:
     print(f"const: {const_res}")  # 114,69102239126921
     print(f"x range : {x_max - x_min}")
     print(f"y range : {y_max - y_min}")
+    # 2. scale to [1,100]
     scaled = xy_to_scaled(coords_xy)
     # sample 5
     # 187,2476970441042852   -> multiply by 114,69102239126921

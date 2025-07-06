@@ -341,8 +341,20 @@ class A2CAgent(object):
                 route_drone = [env.n_nodes - 1] + [step[1].item() for step in best_sol]
                 print(f"truck: {route_truck}")
                 print(f"drone: {route_drone}")
-                drone_starts = [step[2] for step in best_sol]
+
                 coords = graph[0, :, :2]
+
+                # folium visualisation
+                rescaled_coords = scaled_to_latlon(coords)
+                print(f"rescaled coords: {rescaled_coords}")
+                plot_folium(rescaled_coords,
+                            route_truck=route_truck,
+                            route_drone=route_drone,
+                            makespan=best_rewards_list[0],
+                            depot_idx=env.n_nodes - 1
+                            )
+
+                # matplot visualisation
                 plot_route(
                     coords=np.array(coords),
                     route_truck=route_truck,
@@ -357,7 +369,102 @@ class A2CAgent(object):
         return best_rewards_list, times
 
 
+import folium
+from folium.features import DivIcon
+from branca.element import Template, MacroElement
 
+
+def plot_folium(resc_coords, route_truck, route_drone, makespan, depot_idx=None):
+
+    print(makespan)
+    time_sec = makespan * const_res / 10
+    print(time_sec)
+    hours, remainder = divmod(time_sec, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours > 0:
+        time = f"{int(hours)}h:{int(minutes)}min"
+    else:
+        time = f"{int(minutes)}min"
+    print(time)
+
+    if depot_idx is None:
+        depot_idx = resc_coords.shape[0] - 1
+    depot = resc_coords[depot_idx]
+    m = folium.Map(depot, zoom_start=14)
+
+    # marker for each node (as given at the beginning)
+    for i, (lat, lon) in enumerate(resc_coords):
+        folium.Marker(
+            [lat, lon],
+            tooltip=f"node {i}",
+            icon=DivIcon(
+                icon_size=(20, 20),
+                icon_anchor=(10, 10),
+                html=f"""
+                                        <div style="background:blue; 
+                                                   color:white; 
+                                                   text-align:center; 
+                                                   border-radius:10px; 
+                                                   width:20px; height:20px;
+                                                   line-height:20px;">
+                                                   {0 if i == depot_idx else i+1}
+                                        </div>"""
+            )
+        ).add_to(m)
+
+    # truck
+    truck_path = resc_coords[route_truck]
+    folium.PolyLine(truck_path, color="blue", weight=4, tooltip="Truck").add_to(m)
+    # Drone
+    drone_path = resc_coords[route_drone]
+    folium.PolyLine(drone_path, color="green", weight=3, dash_array="6 8", tooltip="Drone").add_to(m)
+
+    def compress_route(route):
+        """remove duplicate nodes """
+        return [route[i] for i in range(len(route)) if i == 0 or route[i] != route[i - 1]]
+
+    cleaned_truck = compress_route(route_truck)
+    cleaned_drone = compress_route(route_drone)
+
+    truck_str = " → ".join(str(0 if i == depot_idx else i + 1) for i in cleaned_truck)
+    drone_str = " → ".join(str(0 if i == depot_idx else i + 1) for i in cleaned_drone)
+
+    legend_html = f"""
+            <div style="
+                 position: fixed;
+                 bottom: 30px; right: 30px;
+                 z-index: 9999;
+                 background: rgba(255,255,255,0.9);
+                 padding: 10px 14px;
+                 border: 2px solid #999;
+                 border-radius: 6px;
+                 box-shadow: 3px 3px 6px rgba(0,0,0,0.25);
+                 font-size: 14px; line-height: 1.5;">
+              <b>Optimal route:&nbsp;</b><br>
+              <span style="color:#000000; font-weight:600;">
+                Truck route: &nbsp;{truck_str}
+              </span><br>
+              <span style="color:#000000; font-weight:600;">
+                Drone route: &nbsp;{drone_str}
+              </span><br>
+              <span style="color:#000000; font-weight:600;">
+                Travel time: &nbsp;{time}
+              </span>
+            </div>"""
+
+    macro = MacroElement()
+    macro._template = Template(f"{{% macro html(this, kwargs) %}}{legend_html}{{% endmacro %}}")
+    m.get_root().add_child(macro)
+
+    # save
+    m.save("opt_route.html")
+
+
+
+
+
+
+# visualise plot
 import matplotlib.pyplot as plt
 
 def plot_route(coords, route_truck, route_drone, depot_idx=None, title="Optimal Route", save_path=None):
@@ -406,3 +513,51 @@ def plot_route(coords, route_truck, route_drone, depot_idx=None, title="Optimal 
     plt.close()
 
 
+#### rescale
+import json
+from pyproj import Proj, transform
+import numpy as np
+
+# Define WGS84 (lat/lon) and UTM projection
+utm = Proj(proj='utm', zone=32, datum='WGS84')
+wgs84 = Proj(proj='latlong', datum='WGS84')
+
+
+def xy_to_latlon(x, y):
+    """
+    UTM (x, y) → (lat, lon)
+    """
+    lon, lat = transform(utm, wgs84, x, y)
+    return np.array([lat, lon])
+
+
+# const
+with open("data/DroneTruck-meta.json") as f:
+    meta = json.load(f)
+
+x_min = meta["x_min"]
+x_max = meta["x_max"]
+y_min = meta["y_min"]
+y_max = meta["y_max"]
+
+scale_const = max(x_max - x_min, y_max - y_min)
+const_res = scale_const / 100
+print(f"const: {const_res}")
+
+
+def scaled_to_xy(scaled):
+    """[1, 100] → meters (UTM)"""
+    x_s, y_s = scaled.T
+    x = x_min + x_s * const_res
+    y = y_min + y_s * const_res
+    return np.vstack([x, y]).T
+
+
+def scaled_to_latlon(scaled_coords):
+    """
+    [1, 100] -> (lat, lon)
+    """
+    # [1, 100] -> meters (UTM)
+    xy_coords = scaled_to_xy(scaled_coords)
+    # -> lat,lon
+    return np.array([xy_to_latlon(x, y) for x, y in xy_coords])
