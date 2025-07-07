@@ -5,7 +5,7 @@ from itertools import combinations
 class DMRequest(object):
     def __init__(self, places):
         self.places = places
-        self.api_key = "AIzaSyDQGk9vdsFohDt9_CC5NnhJjJW-oD9_uJA"  # TODO
+        self.api_key = ""  # TODO
         self.distance_base_url = "https://maps.googleapis.com/maps/api/distancematrix/json"
         self.directions_base_url = "https://maps.googleapis.com/maps/api/directions/json"
 
