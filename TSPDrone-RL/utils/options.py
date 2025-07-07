@@ -12,8 +12,8 @@ def ParseParams():
     parser.add_argument('--R', default = 150, type=int, help="Drone battery life in time units")
     #parser.add_argument('--v_t', default = 0.08719078, type=int, help="Speed of truck in m/s")
     #parser.add_argument('--v_d', default = 0.17438157, type=int, help="Speed of drone in m/s")
-    parser.add_argument('--v_t', default=1, type=int, help="Speed of truck in m/s")
-    parser.add_argument('--v_d', default=2, type=int, help="Speed of drone in m/s")
+    parser.add_argument('--v_t', default=10, type=int, help="Speed of truck in m/s")
+    parser.add_argument('--v_d', default=20, type=int, help="Speed of drone in m/s")
     parser.add_argument('--max_w', default = 2.5, type=float, help="Max weight a drone can carry")
     parser.add_argument('--batch_size', default= 100,type=int, help='Batch size for training')
     parser.add_argument('--n_train', default=1000000,type=int, help='# of episodes for training')
@@ -24,7 +24,7 @@ def ParseParams():
     parser.add_argument('--save_interval', default=1000,type=int, help='save every save_interval steps')
     parser.add_argument('--log_dir', default='logs',type=str, help='folder for saving prints')
     parser.add_argument('--stdout_print', default=True, type=str2bool, help='print control')
-    # Neural Network Structure 
+    parser.add_argument('--random_seed', default= 5,type=int, help='')
     
     # Embedding 
     parser.add_argument('--embedding_dim', default=3,type=int, help='Dimension of input embedding')
@@ -43,12 +43,11 @@ def ParseParams():
     parser.add_argument('--train', default=False,type=str2bool, help="whether to do the training or not")
     parser.add_argument('--actor_net_lr', default=1e-4,type=float, help="Set the learning rate for the actor network")
     parser.add_argument('--critic_net_lr', default=1e-4,type=float, help="Set the learning rate for the critic network")
-    parser.add_argument('--random_seed', default= 5,type=int, help='')
     parser.add_argument('--max_grad_norm', default=2.0, type=float, help='Gradient clipping')
     parser.add_argument('--decode_len', default=30, type=int, help='Max number of steps per episode')
     
     # Evaluation
-    parser.add_argument('--sampling', default=False,type=str2bool, help="whether to do the batch sampling or not")
+    parser.add_argument('--sampling', default=False, type=str2bool, help="whether to do the batch sampling or not")
     parser.add_argument('--n_samples', default=5, type=int, help='the number of samples for batch sampling')
 
     args, unknown = parser.parse_known_args()

@@ -88,7 +88,7 @@ class Env(object):
         self.batch_size = self.input_data[:, :, :2].shape[0]
         self.input_pnt = self.input_data[:, :, :2]
         self.dist_mat = np.zeros([self.batch_size, self.n_nodes, self.n_nodes])
-        self.drone_mat = np.zeros_like(self.dist_mat)
+        self.drone_mat = np.zeros([self.batch_size, self.n_nodes, self.n_nodes])
 
         ###
         # truck for the first graph
@@ -99,7 +99,6 @@ class Env(object):
             self.places = places
 
             dm = DMRequest_google.DMRequest(places)
-            print(dm.api_key)
             dm_data = dm.get_response_data_ga()
             dist_dict = dm_data["waypoints_distances"]
             self.geom_dict = dm_data["waypoints_geometries"]

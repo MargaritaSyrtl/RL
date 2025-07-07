@@ -9,13 +9,24 @@ from utils.agent import A2CAgent
 import time
 
 if __name__ == '__main__':
-    args = ParseParams()   
-    random_seed = args['random_seed']
-    if random_seed is not None and random_seed > 0:
-        print("# Set random seed to %d" % random_seed)
-    np.random.seed(random_seed)
-    random.seed(random_seed)
-    torch.manual_seed(random_seed)
+    start = time.time()
+
+    args = ParseParams()
+    ### needed????
+    seed = int(time.time())
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    print(f"seed: {seed}")
+
+    #random_seed = args['random_seed']
+    #print(f"random seed: {random_seed}")
+    #if random_seed is not None and random_seed > 0:
+    #    print("# Set random seed to %d" % random_seed)
+    #np.random.seed(random_seed)
+    #random.seed(random_seed)
+    #torch.manual_seed(random_seed)
+
     max_epochs = args['n_train']
     device = torch.device("cuda") if torch.cuda.is_available else torch.device("cpu")
     save_path = args['save_path']
@@ -38,13 +49,29 @@ if __name__ == '__main__':
     
     agent = A2CAgent(actor, critic, args, env, dataGen)
     if args['train']:
+        random_seed = args['random_seed']
+        print(f"random seed: {random_seed}")
+        if random_seed is not None and random_seed > 0:
+            print("# Set random seed to %d" % random_seed)
+        np.random.seed(random_seed)
+        random.seed(random_seed)
+        torch.manual_seed(random_seed)
         agent.train()
     else:
         if args['sampling']:
             best_R = agent.sampling_batch(args['n_samples'])
         else:
             R = agent.test()
-        
+
+    end = time.time()
+    elapsed = int(end - start)
+    if elapsed < 60:
+        print(f"Running time: {elapsed}sec")
+    else:
+        minutes = elapsed // 60
+        seconds = elapsed % 60
+        print(f"Running time: {minutes}min {seconds}sec")
+
         
        
 
