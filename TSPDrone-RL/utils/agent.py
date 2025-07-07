@@ -257,6 +257,8 @@ class A2CAgent(object):
         return R.mean()  # average service time for the test set. This is a metric of the quality of the model during validation.
 
     def sampling_batch(self, sample_size):
+        self.use_google_for_first = False  # default False
+
         data_all = self.dataGen.get_test_all()
         num_graphs = data_all.shape[0]
         args = self.args
@@ -272,6 +274,14 @@ class A2CAgent(object):
 
         for graph_idx in range(num_graphs):
             graph = data_all[graph_idx:graph_idx + 1]  # [1, n_nodes, 3]
+            if graph_idx == 0:
+                coords = graph[0, :, :2]
+                rescaled_coords = scaled_to_latlon(coords)
+                np.savetxt("data/rescaled_coords.txt", rescaled_coords, fmt="%.10f", delimiter=",",
+                           comments='')
+            env.use_google_for_first = (graph_idx == 0)
+            # print(env.use_google_for_first)
+
             data = np.repeat(graph, sample_size, axis=0)  # [sample_size, n_nodes, 3]
             env.input_data = data
             state, avail_actions = env.reset()
@@ -336,6 +346,8 @@ class A2CAgent(object):
 
             # visualize best route for graph with idx
             if graph_idx == 0:
+                geom_dict = env.geom_dict
+                traffic = env.traffic
                 best_sol = sols[best_i]
                 route_truck = [env.n_nodes - 1] + [step[0].item() for step in best_sol]
                 route_drone = [env.n_nodes - 1] + [step[1].item() for step in best_sol]
@@ -347,25 +359,29 @@ class A2CAgent(object):
                 # folium visualisation
                 rescaled_coords = scaled_to_latlon(coords)
                 print(f"rescaled coords: {rescaled_coords}")
-                plot_folium(rescaled_coords,
+                places = env.places
+                plot_folium(places,
                             route_truck=route_truck,
                             route_drone=route_drone,
+                            geom_dict=geom_dict,
+                            traffic=traffic,
                             makespan=best_rewards_list[0],
                             depot_idx=env.n_nodes - 1
                             )
 
                 # matplot visualisation
-                plot_route(
-                    coords=np.array(coords),
-                    route_truck=route_truck,
-                    route_drone=route_drone,
-                    depot_idx=env.n_nodes - 1,
-                    title=f"Best Route for Graph {graph_idx}",
-                    save_path=f"results/best_route_graph_{graph_idx}.png"
-                )
+                #plot_route(
+                #    coords=np.array(coords),
+                #    route_truck=route_truck,
+                #    route_drone=route_drone,
+                #    depot_idx=env.n_nodes - 1,
+                #    title=f"Best Route for Graph {graph_idx}",
+                #    save_path=f"results/best_route_graph_{graph_idx}.png"
+                #)
 
         # Save all best costs
         np.savetxt(f'results/best_rewards_list_{sample_size}_samples.txt', best_rewards_list)
+        print(f"ended")
         return best_rewards_list, times
 
 
@@ -374,7 +390,7 @@ from folium.features import DivIcon
 from branca.element import Template, MacroElement
 
 
-def plot_folium(resc_coords, route_truck, route_drone, makespan, depot_idx=None):
+def plot_folium(places, route_truck, route_drone, geom_dict, traffic, makespan, depot_idx=None):
 
     print(makespan)
     time_sec = makespan * const_res / 10
@@ -388,12 +404,12 @@ def plot_folium(resc_coords, route_truck, route_drone, makespan, depot_idx=None)
     print(time)
 
     if depot_idx is None:
-        depot_idx = resc_coords.shape[0] - 1
-    depot = resc_coords[depot_idx]
+        depot_idx = len(places) - 1
+    depot = places[depot_idx]
     m = folium.Map(depot, zoom_start=14)
 
     # marker for each node (as given at the beginning)
-    for i, (lat, lon) in enumerate(resc_coords):
+    for i, (lat, lon) in enumerate(places):
         folium.Marker(
             [lat, lon],
             tooltip=f"node {i}",
@@ -412,19 +428,41 @@ def plot_folium(resc_coords, route_truck, route_drone, makespan, depot_idx=None)
             )
         ).add_to(m)
 
-    # truck
-    truck_path = resc_coords[route_truck]
-    folium.PolyLine(truck_path, color="blue", weight=4, tooltip="Truck").add_to(m)
-    # Drone
-    drone_path = resc_coords[route_drone]
-    folium.PolyLine(drone_path, color="green", weight=3, dash_array="6 8", tooltip="Drone").add_to(m)
-
     def compress_route(route):
         """remove duplicate nodes """
         return [route[i] for i in range(len(route)) if i == 0 or route[i] != route[i - 1]]
 
     cleaned_truck = compress_route(route_truck)
     cleaned_drone = compress_route(route_drone)
+
+    # truck with geometry
+    for a, b in zip(cleaned_truck, cleaned_truck[1:]):
+        key = frozenset([places[a], places[b]])
+        path = geom_dict.get(key, [places[a], places[b]])
+        ratio = traffic.get(key, 1.0)
+        if ratio < 1.1:
+            color = "green"  # green
+        elif ratio < 1.5:
+            color = "#FFC107"  # orange
+        else:
+            color = "#E74C3C"  # red
+        folium.PolyLine(
+            path,
+            color=color,
+            weight=5,
+            tooltip=f"Truck {a+1}→{b+1}, traffic ratio: {ratio:.2f}"  # human readable
+        ).add_to(m)
+
+    # drone
+    for i in range(len(cleaned_drone) - 1):
+        a, b = cleaned_drone[i], cleaned_drone[i + 1]
+        folium.PolyLine(
+            [places[a], places[b]],
+            color="#1E90FF",
+            weight=3,
+            dash_array="6 8",
+            tooltip=f"Drone {a+1}→{b+1}"  # human readable
+        ).add_to(m)
 
     truck_str = " → ".join(str(0 if i == depot_idx else i + 1) for i in cleaned_truck)
     drone_str = " → ".join(str(0 if i == depot_idx else i + 1) for i in cleaned_drone)
@@ -460,12 +498,9 @@ def plot_folium(resc_coords, route_truck, route_drone, makespan, depot_idx=None)
     m.save("opt_route.html")
 
 
-
-
-
-
 # visualise plot
 import matplotlib.pyplot as plt
+
 
 def plot_route(coords, route_truck, route_drone, depot_idx=None, title="Optimal Route", save_path=None):
     plt.figure(figsize=(8, 8))
