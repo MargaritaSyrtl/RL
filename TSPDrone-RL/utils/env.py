@@ -1,9 +1,8 @@
 import numpy as np
 import os
-import warnings
-import collections
 import copy
-import time 
+from . import DMRequest_google
+
 
 def create_test_dataset(
                     args):
@@ -19,8 +18,8 @@ def create_test_dataset(
     # create/load data
     if os.path.exists(fname):
         print('Loading dataset for {}...'.format(task_name))
-        data = np.loadtxt(fname,delimiter=' ')
-        data = data.reshape(-1, n_nodes,3)
+        data = np.loadtxt(fname, delimiter=' ')
+        data = data.reshape(-1, n_nodes, 3)
         input_data = data
     else:
         print('Creating dataset for {}...'.format(task_name))
@@ -34,18 +33,9 @@ def create_test_dataset(
         network = np.concatenate([demand, np.zeros([args['test_size'], 1, 1])], 1)
         input_data = np.concatenate([input_pnt, network], 2)
         np.savetxt(fname, input_data.reshape(-1, n_nodes*3))
-    
- #   fname = 'RL-TSP-len-100-n_nodes-11.txt'
- #   fname = os.path.join(data_dir, fname)
- #   data = np.loadtxt(fname,delimiter=' ')
- #   data = data.reshape(-1, n_nodes,2)
- #   val_data = data
-    fname = 'uniform-n11.txt'
-    data = np.loadtxt(fname,delimiter=' ')
-    data = data.reshape(-1, n_nodes,4)
-    val_data = data
    
-    return input_data, val_data 
+    return input_data
+
 
 class DataGenerator(object):
     def __init__(self,
@@ -54,7 +44,7 @@ class DataGenerator(object):
         self.args = args
         self.rnd = np.random.RandomState(seed= args['random_seed'])
         # create test data
-        self.test_data, self.val_data = create_test_dataset(args)
+        self.test_data = create_test_dataset(args)
      
     def get_train_next(self):
         
@@ -75,17 +65,10 @@ class DataGenerator(object):
         Get all test problems
         '''
         return self.test_data
-    
-    def get_vall_all(self):
-        '''
-        Get all test problems
-        '''
-        return self.val_data
-    
+
     
 class Env(object):
     def __init__(self, args, data):
-       
         self.args = args
         self.rnd = np.random.RandomState(seed= args['random_seed'])
         self.input_data = data
@@ -93,18 +76,50 @@ class Env(object):
         self.v_t = args['v_t']
         self.v_d = args['v_d']
         self.batch_size = args['batch_size']
-       
+        print("Using Not revisiting nodes")
        
     def reset(self):
         self.batch_size = self.input_data[:, :, :2].shape[0]
         self.input_pnt = self.input_data[:, :, :2]
         self.dist_mat = np.zeros([self.batch_size, self.n_nodes, self.n_nodes])
+        self.drone_mat = np.zeros([self.batch_size, self.n_nodes, self.n_nodes])
+
+        ###
+        # truck for the first graph
+        if getattr(self, "use_google_for_first", False):
+            places = np.loadtxt("data/rescaled_coords.txt", delimiter=",")
+            places = [(float(lat), float(lon)) for lat, lon in places]
+            print(f"places: {places}")
+            self.places = places
+
+            dm = DMRequest_google.DMRequest(places)
+            dm_data = dm.get_response_data_ga()
+            dist_dict = dm_data["waypoints_distances"]
+            self.geom_dict = dm_data["waypoints_geometries"]
+            self.traffic = dm_data["waypoints_traffic"]
+
+            for i in range(self.n_nodes):
+                for j in range(self.n_nodes):
+                    if i == j:
+                        self.dist_mat[0, i, j] = 0
+                        continue
+                    key = frozenset([(places[i][0], places[i][1]), (places[j][0], places[j][1])])
+                    dist = dist_dict.get(key, 1e9)  # large value if missing
+                    self.dist_mat[0, i, j] = dist
+        # truck for not 0
+        else:
+            for i in range(self.n_nodes):
+                for j in range(i+1, self.n_nodes):
+                    self.dist_mat[:, i, j] = ((self.input_pnt[:, i, 0] - self.input_pnt[:, j, 0])**2 + (self.input_pnt[:, i, 1] - self.input_pnt[:, j, 1])**2)**0.5
+                    self.dist_mat[:, j, i] =  self.dist_mat[:, i, j]
+        # drone for all
         for i in range(self.n_nodes):
-            for j in range(i+1, self.n_nodes):
-                self.dist_mat[:, i, j] = ((self.input_pnt[:, i, 0] - self.input_pnt[:, j, 0])**2 + (self.input_pnt[:, i, 1] - self.input_pnt[:, j, 1])**2)**0.5
-                self.dist_mat[:, j, i] =  self.dist_mat[:, i, j]
-      
-        self.drone_mat = self.dist_mat/self.v_d
+            for j in range(i + 1, self.n_nodes):
+                self.drone_mat[:, i, j] = ((self.input_pnt[:, i, 0] - self.input_pnt[:, j, 0]) ** 2 + (
+                            self.input_pnt[:, i, 1] - self.input_pnt[:, j, 1]) ** 2) ** 0.5
+                self.drone_mat[:, j, i] = self.drone_mat[:, i, j]
+        # self.drone_mat = self.dist_mat/self.v_d
+
         avail_actions = np.ones([self.batch_size, self.n_nodes, 2], dtype=np.float32)
         avail_actions[:, self.n_nodes-1, :] = np.zeros([self.batch_size, 2])
         self.state = np.ones([self.batch_size, self.n_nodes])
@@ -114,12 +129,10 @@ class Env(object):
         self.current_time = np.zeros(self.batch_size)  
         self.truck_loc = np.ones([self.batch_size], dtype=np.int32)*(self.n_nodes-1)
         self.drone_loc = np.ones([self.batch_size], dtype=np.int32)*(self.n_nodes-1)
-        self.combined_nodes = np.zeros([self.batch_size, self.n_nodes])
-        self.combined_check = np.zeros([self.batch_size, self.n_nodes])
+ 
         dynamic = np.zeros([self.batch_size, self.n_nodes, 2], dtype=np.float32)
         dynamic[:, :, 0] = self.dist_mat[:, self.n_nodes-1]
         dynamic[:, :, 1] = self.drone_mat[:, self.n_nodes-1]
-      
    
         return dynamic, avail_actions 
         
@@ -135,9 +148,10 @@ class Env(object):
         C = time_vec_truck[:, 1]+ np.equal(time_vec_truck[:, 1], np.zeros(self.batch_size)).astype(int)*np.ones(self.batch_size)*10000                                          
         D = time_vec_drone[:, 1]+ np.equal(time_vec_drone[:, 1], np.zeros(self.batch_size)).astype(int)*np.ones(self.batch_size)*10000                         
         time_step = np.minimum.reduce([A, B, C, D])
-       
+        
         b_s = np.where(terminated==1)[0]
         time_step[b_s] = np.zeros(len(b_s))
+       
         self.time_step = time_step 
         self.current_time += time_step 
         
@@ -148,16 +162,12 @@ class Env(object):
         time_vec_drone[:, 1]+=np.logical_and(np.equal(time_vec_drone[:, 1], np.zeros(self.batch_size)), 
                                      np.greater(t_drone, np.zeros(self.batch_size))).astype(int)*(t_drone-time_step) - \
                               np.greater(time_vec_drone[:, 1], np.zeros(self.batch_size))*(time_step)
-
        
-     #   self.truck_loc += np.logical_and(np.less_equal(time_step, t_truck), np.equal(time_vec_truck[:, 1], np.zeros(self.batch_size)))*(idx_truck - self.truck_loc)
-     #   self.drone_loc += np.logical_and(np.less_equal(time_step, t_drone), np.equal(time_vec_drone[:, 1], np.zeros(self.batch_size)))*(idx_drone - self.drone_loc)
         self.truck_loc += np.equal(time_vec_truck[:, 1], np.zeros(self.batch_size))*(idx_truck - self.truck_loc)
         self.drone_loc += np.equal(time_vec_drone[:, 1], np.zeros(self.batch_size))*(idx_drone - self.drone_loc)
         time_vec_truck[:, 0] = np.logical_and(np.less(time_step, t_truck), np.greater(time_vec_truck[:, 1], np.zeros(self.batch_size)))*idx_truck 
         time_vec_drone[:, 0] = np.logical_and(np.less(time_step, t_drone), np.greater(time_vec_drone[:, 1], np.zeros(self.batch_size)))*idx_drone 
-        
-        
+
         # update demand because of turck and drone 
         b_s = np.where(np.equal(time_vec_truck[:, 1], np.zeros(self.batch_size)))[0]
         self.state[b_s, idx_truck[b_s]] = np.zeros(len(b_s)) 
@@ -166,18 +176,12 @@ class Env(object):
         # update sortie if drone served customer 
         self.sortie[idx_satis] = np.ones(len(idx_satis)) 
         a = np.equal((self.truck_loc==self.drone_loc).astype(int)+(time_vec_drone[:, 1]==0).astype(int)+(time_vec_truck[:, 1]==0).astype(int), 3)
-        b = np.equal((self.combined_nodes[np.arange(self.batch_size), self.truck_loc]==1).astype(int) + a.astype(int), 2)
         idx_stais = np.where(np.expand_dims(a, 1))[0]
         self.sortie[idx_stais] = np.zeros(len(idx_stais)) 
         self.returned = np.ones(self.batch_size) - np.equal((old_sortie==1).astype(int) +(self.sortie==1).astype(int)+(time_vec_drone[:, 1]==0).astype(int), 3)
-        self.returned[idx_stais] = np.ones(len(idx_stais)) 
-        self.combined_nodes[idx_stais, self.truck_loc[idx_stais]] = 1 
-        b_s = np.where(b)[0]
-        self.combined_check[b_s, idx_truck[b_s]] =1
-        #######################################################################################
-                                # masking scheme
-        #######################################################################################
-        
+        self.returned[idx_stais] = np.ones(len(idx_stais))
+
+        # masking scheme
         avail_actions = np.zeros([self.batch_size, self.n_nodes, 2], dtype=np.float32)
         
         # for unfinished actions of truck: make only unfinished actions available 
@@ -189,7 +193,6 @@ class Env(object):
         idx_fixed_d = time_vec_drone[b_s_d, np.zeros(len(b_s_d), dtype=np.int64)]
         avail_actions[b_s_d, idx_fixed_d.astype(int), 1] = np.ones(len(b_s_d))
 
-       
         # otherwise, select any node with unsatisfied demand regardless sortie value 
         a = np.equal(np.greater_equal(time_vec_truck[:, 1], 0).astype(int) + np.equal(time_vec_drone[:, 1], 0).astype(int), 2)
         b_s = np.where(np.expand_dims(a, 1))[0]
@@ -200,17 +203,10 @@ class Env(object):
         b_s = np.where(np.expand_dims(a, 1))[0]
         avail_actions[b_s, :, 1] = 0
         avail_actions[b_s, self.drone_loc[b_s], 1] = 1
-        
-        # for drone if the action is finished and sortie == 1 let the drone select comb nodes 
-        a = np.equal(np.equal(time_vec_drone[:, 1], 0).astype(int)+np.equal(self.sortie, 1).astype(int)+np.equal(self.returned, 1).astype(int), 3)
-        b_s = np.where(a)[0]
-        avail_actions[b_s, :, 1] += (self.combined_nodes[b_s] - self.combined_check[b_s])*np.expand_dims(np.greater(self.state[b_s].sum(axis=1), 2).astype(int), 1)*np.ones([len(b_s), self.n_nodes])
-        avail_actions[b_s, :, 1] = np.greater(avail_actions[b_s, :, 1], 0)
-     
+
         # for truck that finished action select any node with customer demand 
         b_s = np.where(np.expand_dims(time_vec_truck[:, 1], 1)==0)[0]
         avail_actions[b_s, :, 0] += np.greater(self.state[b_s, :], 0)
-        avail_actions[b_s, :, 0] += (self.combined_nodes[b_s] - self.combined_check[b_s])*np.expand_dims(np.greater(self.state[b_s].sum(axis=1), 2).astype(int), 1)*np.ones([len(b_s), self.n_nodes])
    
         # if there is expected visit by drone to that customer node with sortie =0
         # don't make that node available to truck 
@@ -247,7 +243,6 @@ class Env(object):
         dynamic = np.zeros([self.batch_size, self.n_nodes, 2], dtype=np.float32)
         dynamic[:, :, 0] = self.dist_mat[np.arange(self.batch_size), self.truck_loc]
         dynamic[:, :, 1] = self.drone_mat[np.arange(self.batch_size), self.drone_loc]
- 
-        
+
         terminated = np.logical_and(np.equal(self.truck_loc, self.n_nodes-1), np.equal(self.drone_loc, self.n_nodes-1)).astype(int)
         return dynamic, avail_actions, terminated, time_vec_truck, time_vec_drone

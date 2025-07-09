@@ -1,17 +1,15 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-import os 
 import copy
-import time 
-import random
-import numpy as np 
-from utils.utils import printOut
-import json
-
+import time
+import matplotlib.pyplot as plt
+import folium
+from folium.features import DivIcon
+from branca.element import Template, MacroElement
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+
 class A2CAgent(object):
     
     def __init__(self, actor, critic, args, env, dataGen):
@@ -19,9 +17,7 @@ class A2CAgent(object):
         self.critic = critic 
         self.args = args 
         self.env = env 
-        self.dataGen = dataGen 
-        out_file = open(os.path.join(args['log_dir'], 'results.txt'),'w+') 
-        self.prt = printOut(out_file,args['stdout_print'])
+        self.dataGen = dataGen
         print("agent is initialized")
         
     def train(self):
@@ -385,23 +381,19 @@ class A2CAgent(object):
         return best_rewards_list, times
 
 
-import folium
-from folium.features import DivIcon
-from branca.element import Template, MacroElement
-
-
 def plot_folium(places, route_truck, route_drone, geom_dict, traffic, makespan, depot_idx=None):
+    """Visualises truck's and drone's optimal routes in real coordinates via folium."""
 
-    print(makespan)
+    print(f"makespan={makespan}")
     time_sec = makespan * const_res / 10
-    print(time_sec)
+    print(f"makespan in seconds={time_sec}")
     hours, remainder = divmod(time_sec, 3600)
     minutes, seconds = divmod(remainder, 60)
     if hours > 0:
-        time = f"{int(hours)}h:{int(minutes)}min"
+        res_time = f"{int(hours)}h:{int(minutes)}min"
     else:
-        time = f"{int(minutes)}min"
-    print(time)
+        res_time = f"{int(minutes)}min"
+    print(f"resulting time={res_time}")
 
     if depot_idx is None:
         depot_idx = len(places) - 1
@@ -486,23 +478,21 @@ def plot_folium(places, route_truck, route_drone, geom_dict, traffic, makespan, 
                 Drone route: &nbsp;{drone_str}
               </span><br>
               <span style="color:#000000; font-weight:600;">
-                Travel time: &nbsp;{time}
+                Travel time: &nbsp;{res_time}
               </span>
             </div>"""
 
     macro = MacroElement()
     macro._template = Template(f"{{% macro html(this, kwargs) %}}{legend_html}{{% endmacro %}}")
     m.get_root().add_child(macro)
-
     # save
-    m.save("opt_route.html")
-
-
-# visualise plot
-import matplotlib.pyplot as plt
+    filename_to_save = "results/opt_route.html"
+    m.save(filename_to_save)
+    print(f"saved in {filename_to_save}")
 
 
 def plot_route(coords, route_truck, route_drone, depot_idx=None, title="Optimal Route", save_path=None):
+    """Visualises truck's and drone's optimal routes in conventional units via matplotlib."""
     plt.figure(figsize=(8, 8))
 
     x, y = coords[:, 0], coords[:, 1]

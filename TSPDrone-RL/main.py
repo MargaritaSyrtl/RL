@@ -3,7 +3,7 @@ import os
 import torch 
 import random
 from utils.options import ParseParams
-from utils.env_no_comb import Env, DataGenerator
+from utils.env import Env, DataGenerator
 from model.nnets import Actor, Critic 
 from utils.agent import A2CAgent 
 import time
@@ -12,13 +12,6 @@ if __name__ == '__main__':
     start = time.time()
 
     args = ParseParams()
-    ### needed????
-    seed = int(time.time())
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    print(f"seed: {seed}")
-
     #random_seed = args['random_seed']
     #print(f"random seed: {random_seed}")
     #if random_seed is not None and random_seed > 0:
@@ -32,7 +25,6 @@ if __name__ == '__main__':
     save_path = args['save_path']
     n_nodes = args['n_nodes']
     dataGen = DataGenerator(args)
-    data = dataGen.get_train_next()
     data = dataGen.get_test_all()
     env = Env(args, data)
     actor = Actor(args['hidden_dim'])
@@ -49,6 +41,7 @@ if __name__ == '__main__':
     
     agent = A2CAgent(actor, critic, args, env, dataGen)
     if args['train']:
+        data = dataGen.get_train_next()
         random_seed = args['random_seed']
         print(f"random seed: {random_seed}")
         if random_seed is not None and random_seed > 0:
