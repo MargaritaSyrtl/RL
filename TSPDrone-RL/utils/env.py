@@ -2,6 +2,7 @@ import numpy as np
 import os
 import copy
 from . import DMRequest_google
+from . import agent
 
 
 def create_test_dataset(
@@ -85,7 +86,7 @@ class Env(object):
         self.drone_mat = np.zeros([self.batch_size, self.n_nodes, self.n_nodes])
 
         ###
-        # truck for the first graph
+        # for the first graph
         if getattr(self, "use_google_for_first", False):
             places = np.loadtxt("data/rescaled_coords.txt", delimiter=",")
             places = [(float(lat), float(lon)) for lat, lon in places]
@@ -95,9 +96,10 @@ class Env(object):
             dm = DMRequest_google.DMRequest(places)
             dm_data = dm.get_response_data_ga()
             dist_dict = dm_data["waypoints_distances"]
+            # duration_dict = dm_data["waypoints_durations"]  # todo
             self.geom_dict = dm_data["waypoints_geometries"]
             self.traffic = dm_data["waypoints_traffic"]
-
+            # truck
             for i in range(self.n_nodes):
                 for j in range(self.n_nodes):
                     if i == j:
@@ -106,19 +108,31 @@ class Env(object):
                     key = frozenset([(places[i][0], places[i][1]), (places[j][0], places[j][1])])
                     dist = dist_dict.get(key, 1e9)  # large value if missing
                     self.dist_mat[0, i, j] = dist
+            # drone
+            xy_coords = agent.scaled_to_xy(self.input_pnt[0])  # [n_nodes, 2]
+            for i in range(self.n_nodes):
+                for j in range(self.n_nodes):
+                    if i == j:
+                        self.drone_mat[0, i, j] = 0
+                        continue
+                    dist = np.linalg.norm(xy_coords[i] - xy_coords[j])
+                    self.drone_mat[0, i, j] = dist
+
         # truck for not 0
         else:
             for i in range(self.n_nodes):
                 for j in range(i+1, self.n_nodes):
                     self.dist_mat[:, i, j] = ((self.input_pnt[:, i, 0] - self.input_pnt[:, j, 0])**2 + (self.input_pnt[:, i, 1] - self.input_pnt[:, j, 1])**2)**0.5
-                    self.dist_mat[:, j, i] =  self.dist_mat[:, i, j]
-        # drone for all
-        for i in range(self.n_nodes):
-            for j in range(i + 1, self.n_nodes):
-                self.drone_mat[:, i, j] = ((self.input_pnt[:, i, 0] - self.input_pnt[:, j, 0]) ** 2 + (
+                    self.dist_mat[:, j, i] = self.dist_mat[:, i, j]
+            # drone for not 0
+            for i in range(self.n_nodes):
+                for j in range(i + 1, self.n_nodes):
+                    self.drone_mat[:, i, j] = ((self.input_pnt[:, i, 0] - self.input_pnt[:, j, 0]) ** 2 + (
                             self.input_pnt[:, i, 1] - self.input_pnt[:, j, 1]) ** 2) ** 0.5
-                self.drone_mat[:, j, i] = self.drone_mat[:, i, j]
-        # self.drone_mat = self.dist_mat/self.v_d
+                    self.drone_mat[:, j, i] = self.drone_mat[:, i, j]
+
+        self.dist_mat = self.dist_mat / self.v_t  # time for truck
+        self.drone_mat = self.drone_mat/self.v_d  # time for drone
 
         avail_actions = np.ones([self.batch_size, self.n_nodes, 2], dtype=np.float32)
         avail_actions[:, self.n_nodes-1, :] = np.zeros([self.batch_size, 2])

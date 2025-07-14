@@ -385,7 +385,8 @@ def plot_folium(places, route_truck, route_drone, geom_dict, traffic, makespan, 
     """Visualises truck's and drone's optimal routes in real coordinates via folium."""
 
     print(f"makespan={makespan}")
-    time_sec = makespan * const_res / 10
+    # time_sec = makespan * const_res / 10  # todo scale??
+    time_sec = makespan
     print(f"makespan in seconds={time_sec}")
     hours, remainder = divmod(time_sec, 3600)
     minutes, seconds = divmod(remainder, 60)

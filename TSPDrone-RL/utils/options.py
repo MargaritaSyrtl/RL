@@ -10,11 +10,11 @@ def ParseParams():
 
     # Data generation for Training and Testing 
     parser.add_argument('--n_nodes', default=11, type=int, help="Number of nodes")
-    parser.add_argument('--v_t', default=0.08719078, type=int, help="Speed of truck in m/s")  # 10m/s / const_res
-    parser.add_argument('--v_d', default=0.17438157, type=int, help="Speed of drone in m/s")  # 20m/s / const_res
-    # parser.add_argument('--v_t', default=10, type=int, help="Speed of truck in m/s")
-    # parser.add_argument('--v_d', default=20, type=int, help="Speed of drone in m/s")
-    parser.add_argument('--R', default=150, type=int, help="Drone battery life in time units")  # or 3000m
+    #parser.add_argument('--v_t', default=0.08719078, type=int, help="Speed of truck in m/s")  # 10m/s / const_res
+    #parser.add_argument('--v_d', default=0.17438157, type=int, help="Speed of drone in m/s")  # 20m/s / const_res
+    parser.add_argument('--v_t', default=10, type=int, help="Speed of truck in m/s")
+    parser.add_argument('--v_d', default=20, type=int, help="Speed of drone in m/s")
+    parser.add_argument('--R', default=17242, type=int, help="Drone battery life in time units")
     parser.add_argument('--random_seed', default=5, type=int, help='')
     parser.add_argument('--batch_size', default=100, type=int, help='Batch size for training')
     parser.add_argument('--test_size', default=100, type=int, help='# of instances for testing')
