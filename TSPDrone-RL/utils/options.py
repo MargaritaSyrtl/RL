@@ -14,7 +14,7 @@ def ParseParams():
     # parser.add_argument('--v_d', default=0.17438157, type=int, help="Speed of drone in m/s")  # 20m/s / const_res
     parser.add_argument('--v_t', default=10, type=int, help="Speed of truck in m/s")
     parser.add_argument('--v_d', default=20, type=int, help="Speed of drone in m/s")
-    parser.add_argument('--drone_range', default=30600, type=int, help="(Half-)drone range in meters")  # 51min=3060sec
+    parser.add_argument('--drone_range', default=1530, type=int, help="(Half-)drone range in seconds")
     parser.add_argument('--random_seed', default=5, type=int, help='')
     parser.add_argument('--batch_size', default=1, type=int, help='Batch size for training')
     parser.add_argument('--test_size', default=1, type=int, help='# of instances for testing')

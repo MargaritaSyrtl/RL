@@ -267,8 +267,8 @@ class Env(object):
             for i in range(self.n_nodes):
                 if avail_actions[0, i, 1] == 1:  # if the action from the current position to i is allowed
                     # distance from the current position of the drone to node i
-                    flight_dist = self.drone_mat[0, cur_loc, i] * self.v_d
-                    if flight_dist > self.drone_range:
+                    flight_dur = self.drone_mat[0, cur_loc, i]
+                    if flight_dur > self.drone_range:
                         avail_actions[0, i, 1] = 0
 
         return dynamic, avail_actions, terminated, time_vec_truck, time_vec_drone
