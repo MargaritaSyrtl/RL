@@ -77,6 +77,7 @@ class Env(object):
         self.v_t = args['v_t']
         self.v_d = args['v_d']
         self.batch_size = args['batch_size']
+        self.drone_range = args['drone_range']
         print("Using Not revisiting nodes")
        
     def reset(self):
@@ -259,4 +260,15 @@ class Env(object):
         dynamic[:, :, 1] = self.drone_mat[np.arange(self.batch_size), self.drone_loc]
 
         terminated = np.logical_and(np.equal(self.truck_loc, self.n_nodes-1), np.equal(self.drone_loc, self.n_nodes-1)).astype(int)
+        # check the drone range
+        # for the first graph only
+        if getattr(self, "use_google_for_first", False):
+            cur_loc = self.drone_loc[0]
+            for i in range(self.n_nodes):
+                if avail_actions[0, i, 1] == 1:  # if the action from the current position to i is allowed
+                    # distance from the current position of the drone to node i
+                    flight_dist = self.drone_mat[0, cur_loc, i] * self.v_d
+                    if flight_dist > self.drone_range:
+                        avail_actions[0, i, 1] = 0
+
         return dynamic, avail_actions, terminated, time_vec_truck, time_vec_drone

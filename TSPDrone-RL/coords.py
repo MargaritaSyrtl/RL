@@ -20,7 +20,7 @@ coords = np.array([
 ])
 
 # parameters
-num_instances = 99
+#num_instances = 99
 num_points = 11
 lat_center = 50.00
 lon_center = 7.80
@@ -67,7 +67,7 @@ def xy_to_scaled(xy):
     return np.vstack([x_s, y_s]).T
 
 
-with open(f"data/DroneTruck-size-100-len-{num_points}.txt", "w") as f:
+with open(f"data/DroneTruck-size-1-len-{num_points}.txt", "w") as f:
     # first raw is my coords
     # scale the coords
     const_scale = max(x_max - x_min, y_max - y_min)
@@ -112,17 +112,17 @@ with open(f"data/DroneTruck-size-100-len-{num_points}.txt", "w") as f:
     f.write(" ".join(row) + "\n")
 
     # create random 99 raws of coords
-    for _ in range(num_instances):
-        lats = np.random.uniform(lat_min, lat_max, num_points)
-        lons = np.random.uniform(lon_min, lon_max, num_points)
-        coords_ = zip(lats, lons)
-        # combine back into a vector
-        xy = np.vstack([latlon_to_xy(lat, lon) for lat, lon in zip(lats, lons)])
-        scaled = xy_to_scaled(xy)
+    #for _ in range(num_instances):
+    #    lats = np.random.uniform(lat_min, lat_max, num_points)
+    #    lons = np.random.uniform(lon_min, lon_max, num_points)
+    #    coords_ = zip(lats, lons)
+    #    # combine back into a vector
+    #    xy = np.vstack([latlon_to_xy(lat, lon) for lat, lon in zip(lats, lons)])
+    #    scaled = xy_to_scaled(xy)#
 
-        row = [f"{x:.18e} {y:.18e} {d:.18e}"
-               for (x, y), d in zip(scaled, demands)]
-        f.write(" ".join(row) + "\n")
+    #    row = [f"{x:.18e} {y:.18e} {d:.18e}"
+    #           for (x, y), d in zip(scaled, demands)]
+    #    f.write(" ".join(row) + "\n")
 
 
 meta_path = "data/DroneTruck-meta.json"
